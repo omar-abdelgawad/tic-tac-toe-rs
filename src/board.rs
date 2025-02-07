@@ -1,29 +1,23 @@
-pub struct Table {
+pub struct Board {
     elements: [ElementShape; 9],
     cur_player: ElementShape,
 }
-impl Table {
-    pub fn new() -> Table {
-        Table {
+impl Board {
+    pub fn new() -> Board {
+        Board {
             elements: [ElementShape::Empty; 9],
             cur_player: ElementShape::X,
         }
     }
     pub fn state_str(&self) -> String {
-        let mut state = String::new();
-        for (i, element) in self.elements.iter().enumerate() {
-            let value = if element.value().is_empty() {
-                format!("[{}]", i.to_string())
-            } else {
-                format!(" {} ", element.value().to_string())
-            };
-
-            state.push_str(&value);
-            if i % 3 == 2 {
-                state.push('\n');
-            }
-        }
-        state
+        self.elements
+            .iter()
+            .enumerate()
+            .map(|(i, element)| match element {
+                ElementShape::Empty => format!("[{}]", i.to_string()),
+                _ => format!(" {} ", element.value().to_string()),
+            }+ if i%3==2{"\n"}else{""} )
+            .collect()
     }
     pub fn is_full(&self) -> bool {
         self.elements
