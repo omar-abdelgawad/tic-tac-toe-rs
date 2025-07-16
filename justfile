@@ -1,8 +1,11 @@
 default:
   @just --list
+
+against_comp:
+  cargo run -r -- -c
+
+two-player:
+  cargo run -r 
+
 test:
-  test -n "" || true
   @cargo test
-# tutorial comment
-test_recipe:
-  echo 'This is another recipe.'

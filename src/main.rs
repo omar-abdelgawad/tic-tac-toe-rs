@@ -2,8 +2,7 @@ mod board;
 mod cli;
 use board::Board;
 use board::ElementShape;
-use clap::Parser;
-use cli::Args;
+use cli::get_args;
 use std::io::{self, Write};
 
 fn clear_screen() {
@@ -11,7 +10,7 @@ fn clear_screen() {
     io::stdout().flush().unwrap();
 }
 fn main() {
-    let args = Args::parse();
+    let args = get_args();
     clear_screen();
     let mut board = Board::new();
     let mut winner = ElementShape::default();

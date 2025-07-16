@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display};
+use std::fmt::Display;
 
 #[derive(Clone, Debug)]
 pub struct Board {
@@ -42,10 +42,10 @@ impl Board {
             .all(|element| element != &ElementShape::Empty)
     }
     pub fn set_element(&mut self, index: usize) -> Result<(), String> {
-        if index > 8usize {
+        if index > 8 {
             Err(String::from("Input has to be less than 8."))
         } else if self.elements[index] != ElementShape::Empty {
-            Err(format!("Space {} already taken try again.", index))
+            Err(format!("Position {} already taken try again.", index))
         } else {
             self.elements[index] = self.cur_player;
             self.switch_player();
@@ -93,43 +93,46 @@ impl Board {
     fn winning_is_possible_helper(&mut self) -> bool {
         // I can prob terminate early with if stmt on self.turn_no but
         // who cares
-        for i in 0..9 {
-            if self.elements[i] == ElementShape::Empty {
-                self.elements[i] = self.cur_player;
-                self.switch_player();
-                for pattern in Board::WIN_PATTERNS.iter() {
-                    let first = self.elements[pattern[0]];
-                    if first == ElementShape::Empty {
-                        continue;
-                    }
-                    if self.elements[pattern[1]] == first && self.elements[pattern[2]] == first {
-                        return true;
-                    }
+        for i in self.get_all_empty_spaces() {
+            self.set_element(i).unwrap();
+            for pattern in Board::WIN_PATTERNS.iter() {
+                let first = self.elements[pattern[0]];
+                if first == ElementShape::Empty {
+                    continue;
                 }
-                if self.winning_is_possible_helper() {
+                if self.elements[pattern[1]] == first && self.elements[pattern[2]] == first {
                     return true;
                 }
-                self.elements[i] = ElementShape::Empty;
-                self.switch_player();
-                self.turn_no -= 2;
             }
+            if self.winning_is_possible_helper() {
+                return true;
+            }
+            // backtrack
+            self.elements[i] = ElementShape::Empty;
+            self.switch_player();
+            self.turn_no -= 2;
         }
         false
     }
-    fn get_all_empty_spaces(&self) -> impl Iterator<Item = usize> + '_ {
-        self.elements.iter().enumerate().filter_map(|(i, e)| {
-            if *e == ElementShape::Empty {
-                Some(i)
-            } else {
-                None
-            }
-        })
+    fn get_all_empty_spaces(&self) -> Vec<usize> {
+        self.elements
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| {
+                if *e == ElementShape::Empty {
+                    Some(i)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
     }
+    // currently random move
     pub fn play_computer_move(&mut self) {
         use rand::rng;
         use rand::seq::IteratorRandom; // for `.choose()` method
         let mut rng = rng();
-        if let Some(index) = self.get_all_empty_spaces().choose(&mut rng) {
+        if let Some(&index) = self.get_all_empty_spaces().iter().choose(&mut rng) {
             let _ = self.set_element(index);
         } else {
             eprintln!("Computer couldn't make a move!")
@@ -164,6 +167,11 @@ mod test {
     #[test]
     fn test_normal_game() {
         let mut board = Board::new();
+        /*
+         *  X  O  X
+         *  O  X  O
+         *  X [7][8]
+         *  */
         for i in 0..6 {
             let e = board.set_element(i);
             assert!(e.is_ok());
@@ -172,5 +180,10 @@ mod test {
         }
         assert!(board.set_element(6).is_ok());
         assert_eq!(board.get_winner().unwrap(), ElementShape::X);
+    }
+    #[test]
+    fn test_new_game_winnable() {
+        let board = Board::new();
+        assert!(board.winning_is_possible());
     }
 }

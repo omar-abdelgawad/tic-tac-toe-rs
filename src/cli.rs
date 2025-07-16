@@ -8,3 +8,7 @@ pub struct Args {
     #[arg(long, short = 'c')]
     pub computer: bool,
 }
+
+pub fn get_args() -> Args {
+    Args::parse()
+}
