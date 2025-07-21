@@ -1,10 +1,17 @@
-use std::fmt::Display;
+use std::{error::Error, fmt::Display};
 
 #[derive(Clone, Debug)]
 pub struct Board {
     elements: [ElementShape; 9],
     cur_player: ElementShape,
     turn_no: u8,
+}
+type Outcome = ElementShape;
+type Move = usize;
+impl Default for Board {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 impl Board {
     pub fn new() -> Board {
@@ -14,15 +21,15 @@ impl Board {
             turn_no: 1,
         }
     }
-    //pub fn from_move_sequence(
-    //    move_seq: impl Iterator<Item = usize>,
-    //) -> Result<Board, Box<dyn Error>> {
-    //    let mut board = Board::new();
-    //    for move_ele in move_seq {
-    //        board.set_element(move_ele)?
-    //    }
-    //    Ok(board)
-    //}
+    pub fn from_move_sequence(
+        move_seq: impl Iterator<Item = Move>,
+    ) -> Result<Board, Box<dyn Error>> {
+        let mut board = Board::new();
+        for move_ele in move_seq {
+            board.set_element(move_ele)?
+        }
+        Ok(board)
+    }
     pub fn get_cur_player(&self) -> ElementShape {
         self.cur_player
     }
@@ -41,7 +48,11 @@ impl Board {
             .iter()
             .all(|element| element != &ElementShape::Empty)
     }
-    pub fn set_element(&mut self, index: usize) -> Result<(), String> {
+    pub fn make_move(&mut self, index: Move) -> Result<Option<Outcome>, String> {
+        self.set_element(index)?;
+        Ok(self.get_winner())
+    }
+    pub fn set_element(&mut self, index: Move) -> Result<(), String> {
         if index > 8 {
             Err(String::from("Input has to be less than 8."))
         } else if self.elements[index] != ElementShape::Empty {
@@ -93,7 +104,7 @@ impl Board {
     fn winning_is_possible_helper(&mut self) -> bool {
         // I can prob terminate early with if stmt on self.turn_no but
         // who cares
-        for i in self.get_all_empty_spaces() {
+        for i in self.get_all_valid_moves() {
             self.set_element(i).unwrap();
             for pattern in Board::WIN_PATTERNS.iter() {
                 let first = self.elements[pattern[0]];
@@ -108,13 +119,16 @@ impl Board {
                 return true;
             }
             // backtrack
-            self.elements[i] = ElementShape::Empty;
-            self.switch_player();
-            self.turn_no -= 2;
+            self.undo_move(i);
         }
         false
     }
-    fn get_all_empty_spaces(&self) -> Vec<usize> {
+    fn undo_move(&mut self, last_move: Move) {
+        self.elements[last_move] = ElementShape::Empty;
+        self.switch_player();
+        self.turn_no -= 2;
+    }
+    fn get_all_valid_moves(&self) -> Vec<Move> {
         self.elements
             .iter()
             .enumerate()
@@ -129,13 +143,64 @@ impl Board {
     }
     // currently random move
     pub fn play_computer_move(&mut self) {
-        use rand::rng;
-        use rand::seq::IteratorRandom; // for `.choose()` method
-        let mut rng = rng();
-        if let Some(&index) = self.get_all_empty_spaces().iter().choose(&mut rng) {
-            let _ = self.set_element(index);
-        } else {
-            eprintln!("Computer couldn't make a move!")
+        let next_move = self.calculate_best_move();
+        let _ = self.set_element(next_move);
+    }
+
+    // return best move to take
+    // if multiple moves win then pick smallest in number
+    // if no moves win pick move draws
+    // if no moves draw then pick first losing move
+    fn calculate_best_move(&self) -> Move {
+        let mut move_and_outcome: Vec<_> = Vec::new();
+        for valid_move in self.get_all_valid_moves() {
+            let move_outcome = self.evaluate_move(valid_move);
+            if move_outcome == self.cur_player {
+                return valid_move;
+            }
+            move_and_outcome.push((valid_move, move_outcome));
+        }
+        for (valid_move, move_outcome) in &move_and_outcome {
+            if *move_outcome == Outcome::Empty {
+                return *valid_move;
+            }
+        }
+        move_and_outcome[0].0
+    }
+
+    // evaluate if a move is winning, drawing, or losing
+    fn evaluate_move(&self, move_to_make: Move) -> Outcome {
+        let mut copy_board = self.clone();
+        copy_board.evaluate_move_helper(move_to_make)
+    }
+    fn evaluate_move_helper(&mut self, move_to_make: Move) -> Outcome {
+        match self.make_move(move_to_make) {
+            Err(_) => unreachable!(),
+            Ok(Some(outcome)) => outcome,
+            Ok(None) => {
+                let mut opp_can_win = false;
+                let mut opp_can_draw = false;
+                let mut opp_can_lose = false;
+                let mut outcomes = Vec::new();
+                for valid_move in self.get_all_valid_moves() {
+                    outcomes.push(self.evaluate_move_helper(valid_move));
+                    self.undo_move(valid_move);
+                }
+                // notice now that current player is the person we play against
+                for outcome in outcomes {
+                    match outcome {
+                        Outcome::Empty => opp_can_draw = true,
+                        val if val == self.cur_player => opp_can_win = true,
+                        _ => opp_can_lose = true,
+                    }
+                }
+                match (opp_can_win, opp_can_draw, opp_can_lose) {
+                    (true, _, _) => self.cur_player,
+                    (false, true, _) => Outcome::Empty,
+                    (false, false, true) => self.cur_player.opposite(),
+                    _ => unreachable!(),
+                }
+            }
         }
     }
 }
@@ -154,6 +219,13 @@ impl ElementShape {
             ElementShape::Empty => "",
         }
     }
+    pub fn opposite(&self) -> Self {
+        match self {
+            ElementShape::Empty => ElementShape::Empty,
+            ElementShape::X => ElementShape::O,
+            ElementShape::O => ElementShape::X,
+        }
+    }
 }
 impl Display for ElementShape {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -167,6 +239,7 @@ mod test {
     #[test]
     fn test_normal_game() {
         let mut board = Board::new();
+        assert_eq!(board.get_all_valid_moves(), vec![0, 1, 2, 3, 4, 5, 6, 7, 8]);
         /*
          *  X  O  X
          *  O  X  O
@@ -177,6 +250,7 @@ mod test {
             assert!(e.is_ok());
             assert!(board.get_winner().is_none());
             assert!(board.winning_is_possible());
+            assert_eq!(board.get_all_valid_moves(), Vec::from_iter(i + 1..=8))
         }
         assert!(board.set_element(6).is_ok());
         assert_eq!(board.get_winner().unwrap(), ElementShape::X);
@@ -185,5 +259,70 @@ mod test {
     fn test_new_game_winnable() {
         let board = Board::new();
         assert!(board.winning_is_possible());
+    }
+
+    #[test]
+    fn test_board_from_move_seq() {
+        let seq = vec![0_usize, 1, 2, 3, 4, 5].into_iter();
+        let mut board = Board::from_move_sequence(seq).unwrap();
+        assert!(board.set_element(6).is_ok());
+        assert_eq!(board.get_winner().unwrap(), ElementShape::X);
+    }
+
+    #[test]
+    fn test_win_in_one_move() {
+        let seq = vec![0_usize, 1, 2, 3, 4, 5].into_iter();
+        let mut board = Board::from_move_sequence(seq).unwrap();
+        assert_eq!(board.calculate_best_move(), 6);
+        /*
+         * winning move is 6
+         *  X  O  X
+         *  O  X  O
+         * [6][7][8]
+         *  */
+        board.set_element(7).unwrap();
+        board.set_element(8).unwrap();
+        assert_eq!(board.calculate_best_move(), 6)
+    }
+    #[test]
+    fn test_evaluate_win_in_one_move() {
+        let seq = vec![0_usize, 1, 2, 3, 4, 5].into_iter();
+        let mut board = Board::from_move_sequence(seq).unwrap();
+        assert_eq!(board.evaluate_move(6), Outcome::X);
+        assert_eq!(board.evaluate_move(7), Outcome::X);
+        assert_eq!(board.evaluate_move(8), Outcome::X);
+        board.set_element(7).unwrap();
+        assert_eq!(board.evaluate_move(6), Outcome::X);
+    }
+    #[test]
+    fn test_predict_loss_from_two_moves() {
+        let seq = vec![0_usize, 1, 4].into_iter();
+        let board = Board::from_move_sequence(seq).unwrap();
+        assert_eq!(board.evaluate_move(3), Outcome::X);
+        assert_eq!(board.evaluate_move(8), Outcome::X);
+        /*
+         * best move is 8 to avoid losing
+         * but game is lost anyways
+         *  X  O [2]
+         * [3] X [5]
+         * [6][7][8]
+         *  */
+    }
+    #[test]
+    fn test_win_from_opp_misplay() {
+        let seq = vec![4_usize, 0, 5, 3, 7].into_iter();
+        let board = Board::from_move_sequence(seq).unwrap();
+        /*
+         * best move is 8 to avoid losing
+         * but game is lost anyways
+         *  O [1][2]
+         *  O  X  X
+         * [6] X [8]
+         *  */
+        assert_eq!(board.evaluate_move(6), Outcome::O);
+        assert_eq!(board.evaluate_move(1), Outcome::O);
+        assert_eq!(board.cur_player, ElementShape::O);
+        // the following fails because it also wins from [1]
+        //assert_eq!(board.calculate_best_move(), 6);
     }
 }
