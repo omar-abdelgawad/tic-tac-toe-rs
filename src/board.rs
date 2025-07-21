@@ -173,6 +173,12 @@ impl Board {
         let mut copy_board = self.clone();
         copy_board.evaluate_move_helper(move_to_make)
     }
+    // Minimax function
+    // A more general form of this function is to give values
+    // for winning or losing and making one player try to maximize
+    // while player B try to minimize and so we can assign a value for each state
+    // For example: we can assign X winning as 1 drawing as 0 and losing as -1
+    // and thus the initial state in tic-tac-toe is equal to 0 (always a draw)
     fn evaluate_move_helper(&mut self, move_to_make: Move) -> Outcome {
         match self.make_move(move_to_make) {
             Err(_) => unreachable!(),
@@ -256,13 +262,13 @@ mod test {
         assert_eq!(board.get_winner().unwrap(), ElementShape::X);
     }
     #[test]
-    fn test_new_game_winnable() {
+    fn new_game_is_winnable() {
         let board = Board::new();
         assert!(board.winning_is_possible());
     }
 
     #[test]
-    fn test_board_from_move_seq() {
+    fn create_board_from_move_seq() {
         let seq = vec![0_usize, 1, 2, 3, 4, 5].into_iter();
         let mut board = Board::from_move_sequence(seq).unwrap();
         assert!(board.set_element(6).is_ok());
@@ -270,7 +276,7 @@ mod test {
     }
 
     #[test]
-    fn test_win_in_one_move() {
+    fn win_in_one_move() {
         let seq = vec![0_usize, 1, 2, 3, 4, 5].into_iter();
         let mut board = Board::from_move_sequence(seq).unwrap();
         assert_eq!(board.calculate_best_move(), 6);
@@ -285,7 +291,7 @@ mod test {
         assert_eq!(board.calculate_best_move(), 6)
     }
     #[test]
-    fn test_evaluate_win_in_one_move() {
+    fn evaluate_win_in_one_move() {
         let seq = vec![0_usize, 1, 2, 3, 4, 5].into_iter();
         let mut board = Board::from_move_sequence(seq).unwrap();
         assert_eq!(board.evaluate_move(6), Outcome::X);
@@ -295,7 +301,7 @@ mod test {
         assert_eq!(board.evaluate_move(6), Outcome::X);
     }
     #[test]
-    fn test_predict_loss_from_two_moves() {
+    fn predict_loss_from_two_moves() {
         let seq = vec![0_usize, 1, 4].into_iter();
         let board = Board::from_move_sequence(seq).unwrap();
         assert_eq!(board.evaluate_move(3), Outcome::X);
@@ -309,7 +315,7 @@ mod test {
          *  */
     }
     #[test]
-    fn test_win_from_opp_misplay() {
+    fn win_from_opp_misplay() {
         let seq = vec![4_usize, 0, 5, 3, 7].into_iter();
         let board = Board::from_move_sequence(seq).unwrap();
         /*
@@ -324,5 +330,13 @@ mod test {
         assert_eq!(board.cur_player, ElementShape::O);
         // the following fails because it also wins from [1]
         //assert_eq!(board.calculate_best_move(), 6);
+    }
+
+    #[test]
+    fn perfect_game_always_draw() {
+        let board = Board::new();
+        for valid_move in board.get_all_valid_moves() {
+            assert_eq!(board.evaluate_move(valid_move), Outcome::Empty);
+        }
     }
 }
